@@ -36,3 +36,18 @@
     transform: rotate(360deg);
   }
 }
+/* src/App.css */
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  height: 100vh; /* Ensure body fills viewport */
+}
+
+#pixi-canvas {
+  display: block;
+  width: 100vw; /* Full viewport width */
+  height: 100vh; /* Full viewport height */
+  background-color: #1099bb; /* Match PIXI background */
+}
+
