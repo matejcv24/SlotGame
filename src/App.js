@@ -32,16 +32,19 @@ function App() {
       await Assets.load([
         '/symbols/pozadina.jpg',
         '/symbols/slotborder.png',
-        '/symbols/clubsymbol1.png',
-        '/symbols/acesymbol1.png',
-        '/symbols/diamondsymbol1.png',
-        '/symbols/heartsymbol1.png',
-        '/symbols/7symbol1.png',
+        '/symbols/broccoli.png',
+        '/symbols/banana.png',
+        '/symbols/pepper.png',
+        '/symbols/apple.png',
+        '/symbols/grapes.png',
         '/symbols/startbutton.png',
         '/symbols/pausebutton.png',
         '/symbols/autoplaybutton.png',
         '/audio/audio1.mp3',
         '/audio/audio2.mp3',
+        '/audio/clicksound.wav',
+        '/audio/winsound.wav',
+        '/gif/fire.gif',
       ]);
 
       const backgroundTexture = Texture.from('/symbols/pozadina.jpg');
@@ -70,12 +73,21 @@ function App() {
         },
       });
 
+      const clickSound = Sound.from({
+        url: '/audio/clicksound.wav',
+        preload: true,
+        loaded: (err, sound) => {
+          if (err) console.error('Error loading clicksound:', err);
+          else console.log('Clicksound loaded:', sound);
+        },
+      });
+
       const slotTextures = [
-        Texture.from('/symbols/clubsymbol1.png'),
-        Texture.from('/symbols/acesymbol1.png'),
-        Texture.from('/symbols/diamondsymbol1.png'),
-        Texture.from('/symbols/heartsymbol1.png'),
-        Texture.from('/symbols/7symbol1.png'),
+        Texture.from('/symbols/broccoli.png'),
+        Texture.from('/symbols/banana.png'),
+        Texture.from('/symbols/pepper.png'),
+        Texture.from('/symbols/apple.png'),
+        Texture.from('/symbols/grapes.png'),
       ];
 
       const reels = [];
@@ -172,24 +184,123 @@ function App() {
       const pauseButtonTexture = Texture.from('/symbols/pausebutton.png');
       const autoplayButtonTexture = Texture.from('/symbols/autoplaybutton.png');
 
+      // Player state
+      let player = {
+        credits: 9999, // Initial credits as per the image
+        chip: 5.00, // Initial chip value as per the image
+      };
+
+      // Left side: Balance and Amount display (on separate lines)
+      const balanceText = new Text('BALANCE:', { fontSize: 24, fill: 0xffffff });
+      balanceText.x = marginLeft;
+      balanceText.y = marginTop + slotBorderSprite.height + 10;
+      app.stage.addChild(balanceText);
+
+      const balanceAmountText = new Text(`${player.credits.toFixed(2)}`, { 
+        fontSize: 24, 
+        fill: 0xffffff, 
+        fontWeight: 'bold' // Make the amount bold
+      });
+      balanceAmountText.x = marginLeft;
+      balanceAmountText.y = marginTop + slotBorderSprite.height + 35; // Position below BALANCE
+      app.stage.addChild(balanceAmountText);
+
+      // Center: Bet selection
+      let betLabel = new Text('PLEASE PLACE YOUR BET', { fontSize: 20, fill: 0xffffff });
+      betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
+      betLabel.y = marginTop + slotBorderSprite.height + 10;
+      app.stage.addChild(betLabel);
+
+      const betValues = [5, 10, 15, 20, 25];
+      const betButtons = [];
+      const buttonWidth = 60;
+      const buttonHeight = 40;
+      const buttonSpacing = 10;
+      const totalButtonsWidth = betValues.length * buttonWidth + (betValues.length - 1) * buttonSpacing;
+
+      betValues.forEach((value, index) => {
+        const button = new Graphics();
+        button.beginFill(value === player.chip ? 0x568203 : 0x333333);
+        button.drawRect(0, 0, buttonWidth, buttonHeight);
+        button.endFill();
+        button.x = (app.screen.width - totalButtonsWidth) / 2 + index * (buttonWidth + buttonSpacing);
+        button.y = marginTop + slotBorderSprite.height + 40;
+        button.eventMode = 'static';
+        button.cursor = 'pointer';
+      
+        const buttonText = new Text(value.toFixed(2), { 
+          fontSize: 16, 
+          fill: 0xffffff, 
+          fontWeight: 'bold'
+        });
+        buttonText.x = (buttonWidth - buttonText.width) / 2;
+        buttonText.y = (buttonHeight - buttonText.height) / 2;
+        button.addChild(buttonText);
+      
+        button.addListener('pointerdown', () => {
+          if (clickSound && clickSound.isPlayable) {
+            clickSound.play();
+          }
+          
+          if (isSpinning) {
+            // If already spinning, clicking a chip will stop the reels
+            stopSpinning();
+          } else {
+            // If not spinning, set the bet amount and start spinning
+            player.chip = value;
+            betButtons.forEach((btn, idx) => {
+              btn.clear();
+              btn.beginFill(betValues[idx] === player.chip ? 0x568203 : 0x333333);
+              btn.drawRect(0, 0, buttonWidth, buttonHeight);
+              btn.endFill();
+            });
+            updateUI();
+            startPlay();
+          }
+        });
+      
+        betButtons.push(button);
+        app.stage.addChild(button);
+      });
+
+      // Right side: Play/Stop and Autoplay buttons
       const startButton = new Sprite(startButtonTexture);
       startButton.scale.set(BUTTON_SCALE);
-      startButton.x = Math.round((app.screen.width - startButton.width) / 2);
-      startButton.y = app.screen.height - 100;
+      startButton.x = marginLeft + slotBorderSprite.width - startButton.width;
+      startButton.y = marginTop + slotBorderSprite.height + 20;
       startButton.eventMode = 'static';
       startButton.cursor = 'pointer';
 
       const autoplayButton = new Sprite(autoplayButtonTexture);
       autoplayButton.scale.set(BUTTON_SCALE);
-      autoplayButton.x = startButton.x - startButton.width - 10;
-      autoplayButton.y = app.screen.height - 100;
+      autoplayButton.x = startButton.x - autoplayButton.width - 10;
+      autoplayButton.y = marginTop + slotBorderSprite.height + 20;
       autoplayButton.eventMode = 'static';
       autoplayButton.cursor = 'pointer';
 
+      // Update UI function
+      const updateUI = () => {
+        balanceAmountText.text = `${player.credits.toFixed(2)}`;
+        balanceText.x = marginLeft;
+        balanceAmountText.x = marginLeft;
+        betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
+        betButtons.forEach((button, index) => {
+          button.x = (app.screen.width - totalButtonsWidth) / 2 + index * (buttonWidth + buttonSpacing);
+        });
+      };
+
       let isSpinning = false;
       let isAutoPlaying = false;
+      let running = false;
+      const tweening = [];
 
       autoplayButton.addListener('pointerdown', () => {
+        if (clickSound && clickSound.isPlayable) {
+          console.log('Playing click sound (clicksound.wav)');
+          clickSound.play();
+        } else {
+          console.error('Click sound (clicksound.wav) is not playable:', clickSound);
+        }
         isAutoPlaying = !isAutoPlaying;
         console.log('Autoplay toggled:', isAutoPlaying);
         if (isAutoPlaying) {
@@ -203,6 +314,12 @@ function App() {
       });
 
       startButton.addListener('pointerdown', () => {
+        if (clickSound && clickSound.isPlayable) {
+          console.log('Playing click sound (clicksound.wav)');
+          clickSound.play();
+        } else {
+          console.error('Click sound (clicksound.wav) is not playable:', clickSound);
+        }
         if (!isSpinning) {
           startPlay();
         } else {
@@ -213,17 +330,26 @@ function App() {
       app.stage.addChild(startButton);
       app.stage.addChild(autoplayButton);
 
-      let running = false;
-      const tweening = [];
-
       function startPlay() {
         if (running) return;
+        if (player.credits < player.chip) {
+          console.log('Not enough credits to spin');
+          return;
+        }
+
         running = true;
         isSpinning = true;
 
+        // Change the text to "Good luck!"
+        betLabel.text = 'GOOD LUCK!';
+        betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
+
         startButton.texture = pauseButtonTexture;
-        startButton.x = Math.round((app.screen.width - startButton.width) / 2);
-        startButton.y = app.screen.height - 100;
+        startButton.x = marginLeft + slotBorderSprite.width - startButton.width;
+        startButton.y = marginTop + slotBorderSprite.height + 20;
+
+        player.credits -= player.chip; // Deduct chip value from credits
+        updateUI();
 
         if (spinSound && spinSound.isPlayable) {
           console.log('Playing spin sound (audio2.mp3)');
@@ -284,9 +410,13 @@ function App() {
         isSpinning = false;
         console.log('All reels have stopped');
 
+        // Change the text back to "PLEASE PLACE YOUR BET"
+        betLabel.text = 'PLEASE PLACE YOUR BET';
+        betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
+
         startButton.texture = startButtonTexture;
-        startButton.x = Math.round((app.screen.width - startButton.width) / 2);
-        startButton.y = app.screen.height - 100;
+        startButton.x = marginLeft + slotBorderSprite.width - startButton.width;
+        startButton.y = marginTop + slotBorderSprite.height + 20;
 
         if (spinSound) {
           console.log('Stopping spin sound (audio2.mp3)');
@@ -347,10 +477,6 @@ function App() {
       window.addEventListener('resize', () => {
         backgroundSprite.width = app.screen.width;
         backgroundSprite.height = app.screen.height;
-        startButton.x = Math.round((app.screen.width - startButton.width) / 2);
-        startButton.y = app.screen.height - 100;
-        autoplayButton.x = startButton.x - startButton.width - 10;
-        autoplayButton.y = app.screen.height - 100;
         headerText.x = Math.round((app.screen.width - headerText.width) / 2);
         reelContainer.x = (app.screen.width - slotBorderSprite.width) / 2;
         reelContainer.y = (app.screen.height - slotBorderSprite.height) / 2;
@@ -361,12 +487,18 @@ function App() {
           reels[i].container.x = reelOffsetX + i * (REEL_WIDTH + REEL_SPACING);
           reels[i].container.y = reelOffsetY;
         }
+        startButton.x = marginLeft + slotBorderSprite.width - startButton.width;
+        startButton.y = marginTop + slotBorderSprite.height + 20;
+        autoplayButton.x = startButton.x - autoplayButton.width - 10;
+        autoplayButton.y = marginTop + slotBorderSprite.height + 20;
+        updateUI();
       });
 
       return () => {
         app.destroy(true, { children: true, texture: true, baseTexture: true });
         if (soundInstance) soundInstance.stop();
         if (spinSound) spinSound.stop();
+        if (clickSound) clickSound.stop();
         window.removeEventListener('resize', () => {});
       };
     })();
