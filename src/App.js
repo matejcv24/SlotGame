@@ -82,41 +82,54 @@ function App() {
         },
       });
 
+      const winSound = Sound.from({
+        url: '/audio/winsound.wav',
+        preload: true,
+        loaded: (err, sound) => {
+          if (err) console.error('Error loading winsound:', err);
+          else console.log('Winsound loaded:', sound);
+        },
+      });
+
       const slotTextures = [
-        Texture.from('/symbols/broccoli.png'),
-        Texture.from('/symbols/banana.png'),
-        Texture.from('/symbols/pepper.png'),
-        Texture.from('/symbols/apple.png'),
-        Texture.from('/symbols/grapes.png'),
+        { name: 'broccoli', texture: Texture.from('/symbols/broccoli.png') },
+        { name: 'banana', texture: Texture.from('/symbols/banana.png') },
+        { name: 'pepper', texture: Texture.from('/symbols/pepper.png') },
+        { name: 'apple', texture: Texture.from('/symbols/apple.png') },
+        { name: 'grapes', texture: Texture.from('/symbols/grapes.png') },
       ];
+
+      const symbolValues = {
+        'apple': 5,
+        'banana': 10,
+        'broccoli': 15,
+        'grapes': 20,
+        'pepper': 25
+      };
 
       const reels = [];
       const reelContainer = new Container();
 
-      // Add slot border to reelContainer
       const slotBorderTexture = Texture.from('/symbols/slotborder.png');
       const slotBorderSprite = new Sprite(slotBorderTexture);
       const totalWidth = 7 * REEL_WIDTH + 6 * REEL_SPACING;
-      const slotBorderScaleFactor = totalWidth / slotBorderTexture.width; // Scale to match reel width
+      const slotBorderScaleFactor = totalWidth / slotBorderTexture.width;
       slotBorderSprite.scale.set(slotBorderScaleFactor);
 
-      // Adjust height independently - change this value to make the border taller or shorter
-      const heightScaleFactor = 0.38;  // Scale to adjust height
+      const heightScaleFactor = 0.38;
       slotBorderSprite.scale.y = heightScaleFactor;
 
-      // Center the slot border horizontally and vertically relative to its own scaled size
       slotBorderSprite.x = -(slotBorderSprite.width - totalWidth) / 2;
       slotBorderSprite.y = -(slotBorderSprite.height - REEL_HEIGHT) / 2 + 62;
       reelContainer.addChild(slotBorderSprite);
 
-      // Adjust reel positions to center within the slot border
       const reelOffsetX = (slotBorderSprite.width - totalWidth) / 2;
       const reelOffsetY = (slotBorderSprite.height - REEL_HEIGHT) / 2 + 20;
 
       for (let i = 0; i < 5; i++) {
         const rc = new Container();
-        rc.x = reelOffsetX + i * (REEL_WIDTH + REEL_SPACING) + 145; // Offset to center within border
-        rc.y = reelOffsetY + 5; // Center vertically within border
+        rc.x = reelOffsetX + i * (REEL_WIDTH + REEL_SPACING) + 145;
+        rc.y = reelOffsetY + 5;
         reelContainer.addChild(rc);
 
         const reel = {
@@ -139,9 +152,9 @@ function App() {
 
         const symbolOffset = (REEL_HEIGHT - SYMBOL_SIZE * 3) / 2;
         for (let j = 0; j < 4; j++) {
-          const symbol = new Sprite(
-            slotTextures[Math.floor(Math.random() * slotTextures.length)]
-          );
+          const randomSymbol = slotTextures[Math.floor(Math.random() * slotTextures.length)];
+          const symbol = new Sprite(randomSymbol.texture);
+          symbol.textureName = randomSymbol.name;
           symbol.y = symbolOffset + j * SYMBOL_SIZE;
           symbol.scale.x = symbol.scale.y = Math.min(
             SYMBOL_SIZE / symbol.width,
@@ -184,14 +197,12 @@ function App() {
       const pauseButtonTexture = Texture.from('/symbols/pausebutton.png');
       const autoplayButtonTexture = Texture.from('/symbols/autoplaybutton.png');
 
-      // Player state
       let player = {
-        credits: 9999, // Initial credits as per the image
-        chip: 5.00, // Initial chip value as per the image
+        credits: 9999,
+        chip: 5.00,
       };
 
-      // Left side: Balance and Amount display (on separate lines)
-      const balanceText = new Text('BALANCE:', { fontSize: 24, fill: 0xffffff });
+      const balanceText = new Text('BALANCE:', { fontSize: 20, fill: 0xffffff });
       balanceText.x = marginLeft;
       balanceText.y = marginTop + slotBorderSprite.height + 10;
       app.stage.addChild(balanceText);
@@ -199,17 +210,25 @@ function App() {
       const balanceAmountText = new Text(`${player.credits.toFixed(2)}`, { 
         fontSize: 24, 
         fill: 0xffffff, 
-        fontWeight: 'bold' // Make the amount bold
+        fontWeight: 'bold'
       });
       balanceAmountText.x = marginLeft;
-      balanceAmountText.y = marginTop + slotBorderSprite.height + 35; // Position below BALANCE
+      balanceAmountText.y = marginTop + slotBorderSprite.height + 35;
       app.stage.addChild(balanceAmountText);
 
-      // Center: Bet selection
       let betLabel = new Text('PLEASE PLACE YOUR BET', { fontSize: 20, fill: 0xffffff });
       betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
       betLabel.y = marginTop + slotBorderSprite.height + 10;
       app.stage.addChild(betLabel);
+
+      const winAmountText = new Text('', { 
+        fontSize: 20, 
+        fill: 0xffffff, 
+        fontWeight: 'bold' 
+      });
+      winAmountText.y = marginTop + slotBorderSprite.height + 10;
+      winAmountText.visible = false; // Hidden by default
+      app.stage.addChild(winAmountText);
 
       const betValues = [5, 10, 15, 20, 25];
       const betButtons = [];
@@ -243,10 +262,8 @@ function App() {
           }
           
           if (isSpinning) {
-            // If already spinning, clicking a chip will stop the reels
             stopSpinning();
           } else {
-            // If not spinning, set the bet amount and start spinning
             player.chip = value;
             betButtons.forEach((btn, idx) => {
               btn.clear();
@@ -263,7 +280,6 @@ function App() {
         app.stage.addChild(button);
       });
 
-      // Right side: Play/Stop and Autoplay buttons
       const startButton = new Sprite(startButtonTexture);
       startButton.scale.set(BUTTON_SCALE);
       startButton.x = marginLeft + slotBorderSprite.width - startButton.width;
@@ -278,12 +294,14 @@ function App() {
       autoplayButton.eventMode = 'static';
       autoplayButton.cursor = 'pointer';
 
-      // Update UI function
       const updateUI = () => {
         balanceAmountText.text = `${player.credits.toFixed(2)}`;
         balanceText.x = marginLeft;
         balanceAmountText.x = marginLeft;
         betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
+        if (winAmountText.visible) {
+          winAmountText.x = betLabel.x + betLabel.width + 5; // 5px spacing between "YOU WON" and amount
+        }
         betButtons.forEach((button, index) => {
           button.x = (app.screen.width - totalButtonsWidth) / 2 + index * (buttonWidth + buttonSpacing);
         });
@@ -336,37 +354,37 @@ function App() {
           console.log('Not enough credits to spin');
           return;
         }
-
+      
         running = true;
         isSpinning = true;
-
-        // Change the text to "Good luck!"
+      
         betLabel.text = 'GOOD LUCK!';
         betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
-
+        winAmountText.visible = false; // Hide win amount during spin
+      
         startButton.texture = pauseButtonTexture;
         startButton.x = marginLeft + slotBorderSprite.width - startButton.width;
         startButton.y = marginTop + slotBorderSprite.height + 20;
-
-        player.credits -= player.chip; // Deduct chip value from credits
+      
+        player.credits -= player.chip;
         updateUI();
-
+      
         if (spinSound && spinSound.isPlayable) {
           console.log('Playing spin sound (audio2.mp3)');
           spinSound.play();
         } else {
           console.error('Spin sound (audio2.mp3) is not playable:', spinSound);
         }
-
-        const baseSpinTime = 1000;
-        const stopDelay = 500;
-
+      
+        const baseSpinTime = 700;
+        const stopDelay = 300;
+      
         for (let i = 0; i < reels.length; i++) {
           const r = reels[i];
           const extra = Math.floor(Math.random() * 3);
           const target = r.position + 10 + i * 5 + extra;
           const spinTime = baseSpinTime + i * stopDelay;
-
+      
           tweenTo(
             r,
             'position',
@@ -405,24 +423,127 @@ function App() {
         reelsComplete();
       }
 
+      function printReelSymbols() {
+        console.log('Current symbols on each reel:');
+        reels.forEach((reel, reelIndex) => {
+          const symbolOffset = (REEL_HEIGHT - SYMBOL_SIZE * 3) / 2;
+          const visibleSymbols = reel.symbols
+            .filter(symbol => symbol.y >= symbolOffset && symbol.y < symbolOffset + SYMBOL_SIZE * 3)
+            .sort((a, b) => a.y - b.y)
+            .map(symbol => symbol.textureName);
+          console.log(`Reel ${reelIndex + 1}: ${visibleSymbols.join(', ')}`);
+        });
+      }
+
+      function checkForWins() {
+        const reelSymbols = reels.map(reel => {
+          const symbolOffset = (REEL_HEIGHT - SYMBOL_SIZE * 3) / 2;
+          return reel.symbols
+            .filter(symbol => symbol.y >= symbolOffset && symbol.y < symbolOffset + SYMBOL_SIZE * 3)
+            .sort((a, b) => a.y - b.y)
+            .map(symbol => symbol.textureName);
+        });
+      
+        const lines = [
+          reelSymbols.map(symbols => symbols[0]),
+          reelSymbols.map(symbols => symbols[1]),
+          reelSymbols.map(symbols => symbols[2]),
+          [
+            reelSymbols[0][0],
+            reelSymbols[1][1],
+            reelSymbols[2][2],
+            reelSymbols[3][1],
+            reelSymbols[4][0],
+          ],
+          [
+            reelSymbols[0][2],
+            reelSymbols[1][1],
+            reelSymbols[2][0],
+            reelSymbols[3][1],
+            reelSymbols[4][2],
+          ],
+        ];
+      
+        console.log('Winning lines:', lines);
+      
+        let totalWinnings = 0;
+        let hasWin = false;
+      
+        lines.forEach((line, index) => {
+          const firstSymbol = line[0];
+          let winLength = 1;
+          
+          for (let i = 1; i < line.length; i++) {
+            if (line[i] === firstSymbol) {
+              winLength++;
+            } else {
+              break;
+            }
+          }
+      
+          if (winLength >= 3) {
+            hasWin = true;
+            const symbolValue = symbolValues[firstSymbol];
+            const lineWinnings = (symbolValue * winLength) * player.chip;
+            totalWinnings += lineWinnings;
+            console.log(`Win on line ${index + 1}: ${firstSymbol} x${winLength} = ${lineWinnings.toFixed(2)} (Symbol value: ${symbolValue} × ${winLength} × Chip: ${player.chip})`);
+          }
+        });
+      
+        if (totalWinnings > 0) {
+          player.credits += totalWinnings;
+          console.log(`Total winnings: ${totalWinnings.toFixed(2)} credits`);
+          updateUI();
+        }
+      
+        if (hasWin && winSound && winSound.isPlayable) {
+          console.log('Playing win sound (winsound.wav)');
+          winSound.play();
+        } else if (hasWin) {
+          console.error('Win detected but winsound is not playable:', winSound);
+        }
+      
+        return totalWinnings; // Return the total winnings
+      }
+
       function reelsComplete() {
         running = false;
         isSpinning = false;
         console.log('All reels have stopped');
-
-        // Change the text back to "PLEASE PLACE YOUR BET"
-        betLabel.text = 'PLEASE PLACE YOUR BET';
-        betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
-
+      
+        // Normalize reel positions to ensure alignment
+        reels.forEach(reel => {
+          reel.position = Math.round(reel.position);
+          for (let j = 0; j < reel.symbols.length; j++) {
+            reel.symbols[j].y = ((reel.position + j) % reel.symbols.length) * SYMBOL_SIZE - SYMBOL_SIZE + (REEL_HEIGHT - SYMBOL_SIZE * 3) / 2;
+          }
+        });
+      
+        printReelSymbols();
+        const winnings = checkForWins();
+      
+        // Update betLabel and winAmountText based on whether there was a win
+        if (winnings > 0) {
+          betLabel.text = 'YOU WON';
+          winAmountText.text = `${winnings.toFixed(2)}`;
+          winAmountText.visible = true;
+          betLabel.x = Math.round((app.screen.width - (betLabel.width + 5 + winAmountText.width)) / 2);
+          winAmountText.x = betLabel.x + betLabel.width + 5; // 5px spacing
+        } else {
+          betLabel.text = 'PLEASE PLACE YOUR BET';
+          winAmountText.visible = false;
+          betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
+        }
+      
         startButton.texture = startButtonTexture;
         startButton.x = marginLeft + slotBorderSprite.width - startButton.width;
         startButton.y = marginTop + slotBorderSprite.height + 20;
-
+      
         if (spinSound) {
           console.log('Stopping spin sound (audio2.mp3)');
           spinSound.stop();
         }
-
+      
         if (isAutoPlaying) {
           setTimeout(() => {
             if (isAutoPlaying) {
@@ -445,7 +566,9 @@ function App() {
             s.y = ((r.position + j) % r.symbols.length) * SYMBOL_SIZE - SYMBOL_SIZE + (REEL_HEIGHT - SYMBOL_SIZE * 3) / 2;
 
             if (s.y < -SYMBOL_SIZE && prevy > SYMBOL_SIZE) {
-              s.texture = slotTextures[Math.floor(Math.random() * slotTextures.length)];
+              const randomSymbol = slotTextures[Math.floor(Math.random() * slotTextures.length)];
+              s.texture = randomSymbol.texture;
+              s.textureName = randomSymbol.name;
               s.scale.x = s.scale.y = Math.min(SYMBOL_SIZE / s.texture.width, SYMBOL_SIZE / s.texture.height);
               s.x = Math.round((REEL_WIDTH - s.width) / 2);
             }
@@ -499,6 +622,7 @@ function App() {
         if (soundInstance) soundInstance.stop();
         if (spinSound) spinSound.stop();
         if (clickSound) clickSound.stop();
+        if (winSound) winSound.stop();
         window.removeEventListener('resize', () => {});
       };
     })();
