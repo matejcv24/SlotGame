@@ -227,7 +227,7 @@ function App() {
         fontWeight: 'bold' 
       });
       winAmountText.y = marginTop + slotBorderSprite.height + 10;
-      winAmountText.visible = false; // Hidden by default
+      winAmountText.visible = false;
       app.stage.addChild(winAmountText);
 
       const betValues = [5, 10, 15, 20, 25];
@@ -300,7 +300,7 @@ function App() {
         balanceAmountText.x = marginLeft;
         betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
         if (winAmountText.visible) {
-          winAmountText.x = betLabel.x + betLabel.width + 5; // 5px spacing between "YOU WON" and amount
+          winAmountText.x = betLabel.x + betLabel.width + 5;
         }
         betButtons.forEach((button, index) => {
           button.x = (app.screen.width - totalButtonsWidth) / 2 + index * (buttonWidth + buttonSpacing);
@@ -311,13 +311,111 @@ function App() {
       let isAutoPlaying = false;
       let running = false;
       const tweening = [];
+      let fireCleanups = []; // Store cleanup functions for fire effects
+
+      function createBlinkEffect(symbol, lineNumber) {
+        const blinkContainer = new Container();
+        
+        // Define border colors based on the winning line
+        const borderColors = {
+          1: 0x0000FF, // Blue for Line 1
+          2: 0xFFFF00, // Yellow for Line 2
+          3: 0x00FF00, // Green for Line 3
+          4: 0xFF69B4, // Pink for Line 4
+          5: 0xFF0000, // Red for Line 5
+        };
+        
+        // Select the border color based on the winning line, default to gold if lineNumber is invalid
+        const borderColor = borderColors[lineNumber] || 0xFFD700;
+        console.log(`Applying border color for line ${lineNumber}: ${borderColor.toString(16)}`);
+        
+        // Define the border
+        const border = new Graphics();
+        const borderThickness = 3; // Thickness of the border
+        const widthIncrease = 20; // How much wider we want the box to be (10px on each side)
+        const heightIncrease = 1; // Keep height the same or adjust if needed
+        border.lineStyle(borderThickness, borderColor, 1);
+        border.beginFill(0xFFEA00, 0.6);
+        border.drawRect(
+          -widthIncrease/2, // Start position X (moved left to center the wider box)
+          -heightIncrease/2, // Start position Y
+          SYMBOL_SIZE + widthIncrease, // New width
+          SYMBOL_SIZE + heightIncrease // New height
+        );
+        border.endFill();
+        
+        // Position the border to align with the symbol box
+        const symbolOffsetX = (SYMBOL_SIZE - symbol.width) / 2;
+        const symbolOffsetY = (SYMBOL_SIZE - symbol.height) / 2;
+        blinkContainer.x = symbol.x - symbolOffsetX;
+        blinkContainer.y = symbol.y - symbolOffsetY;
+        
+        // Add the border to the container
+        blinkContainer.addChild(border);
+        
+        // Ensure the border is behind the symbol
+        symbol.parent.addChildAt(blinkContainer, symbol.parent.getChildIndex(symbol));
+      
+        // Store original scale for pulsing animation
+        const originalScale = { x: symbol.scale.x, y: symbol.scale.y };
+        
+        // Blinking animation for border and pulsing for symbol
+        let blinkDirection = -1; // 1 for fading in, -1 for fading out
+        const blinkSpeed = 0.05; // Speed of the blink (alpha change per frame)
+        const minAlpha = 0.3; // Minimum opacity
+        const maxAlpha = 1.0; // Maximum opacity
+        
+        // Pulsing animation variables
+        let pulseDirection = 2; // 1 for growing, -1 for shrinking
+        const pulseSpeed = 0.0020;
+        const minScale = 0.9;
+        const maxScale = 1;
+        
+        const animateEffects = () => {
+          // Update alpha for blinking effect
+          border.alpha += blinkDirection * blinkSpeed;
+          
+          // Update scale for pulsing effect
+          symbol.scale.x += pulseDirection * pulseSpeed;
+          symbol.scale.y += pulseDirection * pulseSpeed;
+          
+          // Reverse blink direction if alpha reaches the min or max
+          if (border.alpha <= minAlpha) {
+            border.alpha = minAlpha;
+            blinkDirection = 1;
+          } else if (border.alpha >= maxAlpha) {
+            border.alpha = maxAlpha;
+            blinkDirection = -1;
+          }
+          
+          // Reverse pulse direction if scale reaches min or max
+          if (symbol.scale.x <= originalScale.x * minScale) {
+            symbol.scale.x = originalScale.x * minScale;
+            symbol.scale.y = originalScale.y * minScale;
+            pulseDirection = 1;
+          } else if (symbol.scale.x >= originalScale.x * maxScale) {
+            symbol.scale.x = originalScale.x * maxScale;
+            symbol.scale.y = originalScale.y * maxScale;
+            pulseDirection = -1;
+          }
+        };
+        
+        // Add the animation to the ticker
+        app.ticker.add(animateEffects);
+        
+        // Return a cleanup function
+        return () => {
+          app.ticker.remove(animateEffects);
+          blinkContainer.destroy({ children: true });
+          // Reset symbol scale to original when effect ends
+          symbol.scale.set(originalScale.x, originalScale.y);
+        };
+      }
 
       autoplayButton.addListener('pointerdown', () => {
         if (clickSound && clickSound.isPlayable) {
           console.log('Playing click sound (clicksound.wav)');
           clickSound.play();
-        } else {
-          console.error('Click sound (clicksound.wav) is not playable:', clickSound);
         }
         isAutoPlaying = !isAutoPlaying;
         console.log('Autoplay toggled:', isAutoPlaying);
@@ -335,8 +433,6 @@ function App() {
         if (clickSound && clickSound.isPlayable) {
           console.log('Playing click sound (clicksound.wav)');
           clickSound.play();
-        } else {
-          console.error('Click sound (clicksound.wav) is not playable:', clickSound);
         }
         if (!isSpinning) {
           startPlay();
@@ -354,37 +450,38 @@ function App() {
           console.log('Not enough credits to spin');
           return;
         }
-      
+
+        fireCleanups.forEach(cleanup => cleanup());
+        fireCleanups = [];
+
         running = true;
         isSpinning = true;
-      
+
         betLabel.text = 'GOOD LUCK!';
         betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
-        winAmountText.visible = false; // Hide win amount during spin
-      
+        winAmountText.visible = false;
+
         startButton.texture = pauseButtonTexture;
         startButton.x = marginLeft + slotBorderSprite.width - startButton.width;
         startButton.y = marginTop + slotBorderSprite.height + 20;
-      
+
         player.credits -= player.chip;
         updateUI();
-      
+
         if (spinSound && spinSound.isPlayable) {
           console.log('Playing spin sound (audio2.mp3)');
           spinSound.play();
-        } else {
-          console.error('Spin sound (audio2.mp3) is not playable:', spinSound);
         }
-      
+
         const baseSpinTime = 700;
         const stopDelay = 300;
-      
+
         for (let i = 0; i < reels.length; i++) {
           const r = reels[i];
           const extra = Math.floor(Math.random() * 3);
           const target = r.position + 10 + i * 5 + extra;
           const spinTime = baseSpinTime + i * stopDelay;
-      
+
           tweenTo(
             r,
             'position',
@@ -396,8 +493,6 @@ function App() {
               if (soundInstance && soundInstance.isPlayable) {
                 console.log(`Reel ${i} stopped, playing sound (audio1.mp3)`);
                 soundInstance.play();
-              } else {
-                console.error('Sound instance (audio1.mp3) is not playable:', soundInstance);
               }
               if (i === reels.length - 1) {
                 reelsComplete();
@@ -441,40 +536,42 @@ function App() {
           return reel.symbols
             .filter(symbol => symbol.y >= symbolOffset && symbol.y < symbolOffset + SYMBOL_SIZE * 3)
             .sort((a, b) => a.y - b.y)
-            .map(symbol => symbol.textureName);
+            .map(symbol => ({ name: symbol.textureName, sprite: symbol }));
         });
       
         const lines = [
-          reelSymbols.map(symbols => symbols[0]),
-          reelSymbols.map(symbols => symbols[1]),
-          reelSymbols.map(symbols => symbols[2]),
+          reelSymbols.map(symbols => symbols[0]), // Line 1
+          reelSymbols.map(symbols => symbols[1]), // Line 2
+          reelSymbols.map(symbols => symbols[2]), // Line 3
           [
             reelSymbols[0][0],
             reelSymbols[1][1],
             reelSymbols[2][2],
             reelSymbols[3][1],
             reelSymbols[4][0],
-          ],
+          ], // Line 4
           [
             reelSymbols[0][2],
             reelSymbols[1][1],
             reelSymbols[2][0],
             reelSymbols[3][1],
             reelSymbols[4][2],
-          ],
+          ], // Line 5
         ];
       
-        console.log('Winning lines:', lines);
+        console.log('Winning lines:', lines.map(line => line.map(s => s.name)));
       
         let totalWinnings = 0;
+        const winningSymbols = new Set();
         let hasWin = false;
+        let winningLine = null; // Track the first winning line number
       
         lines.forEach((line, index) => {
-          const firstSymbol = line[0];
+          const firstSymbol = line[0].name;
           let winLength = 1;
-          
+      
           for (let i = 1; i < line.length; i++) {
-            if (line[i] === firstSymbol) {
+            if (line[i].name === firstSymbol) {
               winLength++;
             } else {
               break;
@@ -486,7 +583,16 @@ function App() {
             const symbolValue = symbolValues[firstSymbol];
             const lineWinnings = (symbolValue * winLength) * player.chip;
             totalWinnings += lineWinnings;
-            console.log(`Win on line ${index + 1}: ${firstSymbol} x${winLength} = ${lineWinnings.toFixed(2)} (Symbol value: ${symbolValue} × ${winLength} × Chip: ${player.chip})`);
+            console.log(`Win on line ${index + 1}: ${firstSymbol} x${winLength} = ${lineWinnings.toFixed(2)}`);
+      
+            for (let i = 0; i < winLength; i++) {
+              winningSymbols.add(line[i].sprite);
+            }
+      
+            // Store the first winning line number (1-based index)
+            if (winningLine === null) {
+              winningLine = index + 1;
+            }
           }
         });
       
@@ -497,13 +603,11 @@ function App() {
         }
       
         if (hasWin && winSound && winSound.isPlayable) {
-          console.log('Playing win sound (winsound.wav)');
+          console.log('Playing win sound (winsound.wav), duration:', winSound.duration);
           winSound.play();
-        } else if (hasWin) {
-          console.error('Win detected but winsound is not playable:', winSound);
         }
       
-        return totalWinnings; // Return the total winnings
+        return { winnings: totalWinnings, winningSymbols: Array.from(winningSymbols), winningLine };
       }
 
       function reelsComplete() {
@@ -511,7 +615,6 @@ function App() {
         isSpinning = false;
         console.log('All reels have stopped');
       
-        // Normalize reel positions to ensure alignment
         reels.forEach(reel => {
           reel.position = Math.round(reel.position);
           for (let j = 0; j < reel.symbols.length; j++) {
@@ -520,15 +623,25 @@ function App() {
         });
       
         printReelSymbols();
-        const winnings = checkForWins();
+        const { winnings, winningSymbols, winningLine } = checkForWins();
       
-        // Update betLabel and winAmountText based on whether there was a win
+        fireCleanups.forEach(cleanup => cleanup());
+        fireCleanups = [];
+      
+        if (winnings > 0) {
+          console.log(`Applying blink effect to ${winningSymbols.length} symbols on winning line ${winningLine}`);
+          winningSymbols.forEach(symbol => {
+            const cleanup = createBlinkEffect(symbol, winningLine); // Pass the winningLine
+            fireCleanups.push(cleanup);
+          });
+        }
+      
         if (winnings > 0) {
           betLabel.text = 'YOU WON';
           winAmountText.text = `${winnings.toFixed(2)}`;
           winAmountText.visible = true;
           betLabel.x = Math.round((app.screen.width - (betLabel.width + 5 + winAmountText.width)) / 2);
-          winAmountText.x = betLabel.x + betLabel.width + 5; // 5px spacing
+          winAmountText.x = betLabel.x + betLabel.width + 5;
         } else {
           betLabel.text = 'PLEASE PLACE YOUR BET';
           winAmountText.visible = false;
@@ -545,11 +658,33 @@ function App() {
         }
       
         if (isAutoPlaying) {
-          setTimeout(() => {
-            if (isAutoPlaying) {
-              startPlay();
-            }
-          }, 500);
+          if (winnings > 0) {
+            console.log('Win detected during autoplay, waiting for winSound to finish...');
+            const waitForWinSound = () => {
+              if (!winSound.isPlaying) {
+                console.log('winSound finished, triggering next spin');
+                if (clickSound && clickSound.isPlayable) {  // ADDED THIS LINE
+                  clickSound.play();                        // ADDED THIS LINE
+                }                                           // ADDED THIS LINE
+                if (isAutoPlaying) {
+                  startPlay();
+                }
+              } else {
+                setTimeout(waitForWinSound, 100);
+              }
+            };
+            waitForWinSound();
+          } else {
+            console.log('No win during autoplay, proceeding with 500ms delay');
+            setTimeout(() => {
+              if (clickSound && clickSound.isPlayable) {  // ADDED THIS LINE
+                clickSound.play();                        // ADDED THIS LINE
+              }                                           // ADDED THIS LINE
+              if (isAutoPlaying) {
+                startPlay();
+              }
+            }, 500);
+          }
         }
       }
 
