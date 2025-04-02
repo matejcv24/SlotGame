@@ -331,7 +331,7 @@ function App() {
         
         // Define the border
         const border = new Graphics();
-        const borderThickness = 3; // Thickness of the border
+        const borderThickness = 4; // Thickness of the border
         const widthIncrease = 20; // How much wider we want the box to be (10px on each side)
         const heightIncrease = 1; // Keep height the same or adjust if needed
         border.lineStyle(borderThickness, borderColor, 1);
@@ -450,38 +450,45 @@ function App() {
           console.log('Not enough credits to spin');
           return;
         }
-
+      
+        // Reset all symbol alphas to 1.0 before starting the spin
+        reels.forEach(reel => {
+          reel.symbols.forEach(symbol => {
+            symbol.alpha = 1.0; // Ensure all symbols start fully opaque
+          });
+        });
+      
         fireCleanups.forEach(cleanup => cleanup());
         fireCleanups = [];
-
+      
         running = true;
         isSpinning = true;
-
+      
         betLabel.text = 'GOOD LUCK!';
         betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
         winAmountText.visible = false;
-
+      
         startButton.texture = pauseButtonTexture;
         startButton.x = marginLeft + slotBorderSprite.width - startButton.width;
         startButton.y = marginTop + slotBorderSprite.height + 20;
-
+      
         player.credits -= player.chip;
         updateUI();
-
+      
         if (spinSound && spinSound.isPlayable) {
           console.log('Playing spin sound (audio2.mp3)');
           spinSound.play();
         }
-
+      
         const baseSpinTime = 700;
         const stopDelay = 300;
-
+      
         for (let i = 0; i < reels.length; i++) {
           const r = reels[i];
           const extra = Math.floor(Math.random() * 3);
           const target = r.position + 10 + i * 5 + extra;
           const spinTime = baseSpinTime + i * stopDelay;
-
+      
           tweenTo(
             r,
             'position',
@@ -628,11 +635,20 @@ function App() {
         fireCleanups.forEach(cleanup => cleanup());
         fireCleanups = [];
       
+        // Apply shading effect only if there’s a win
         if (winnings > 0) {
-          console.log(`Applying blink effect to ${winningSymbols.length} symbols on winning line ${winningLine}`);
-          winningSymbols.forEach(symbol => {
-            const cleanup = createBlinkEffect(symbol, winningLine); // Pass the winningLine
-            fireCleanups.push(cleanup);
+          console.log('Win detected, applying shading to non-winning symbols');
+          reels.forEach(reel => {
+            reel.symbols.forEach(symbol => {
+              // Set non-winning symbols to semi-transparent
+              if (!winningSymbols.includes(symbol)) {
+                symbol.alpha = 0.3; // Shady effect for non-winning symbols
+              } else {
+                symbol.alpha = 1.0; // Ensure winning symbols are fully opaque
+                const cleanup = createBlinkEffect(symbol, winningLine);
+                fireCleanups.push(cleanup);
+              }
+            });
           });
         }
       
@@ -663,9 +679,9 @@ function App() {
             const waitForWinSound = () => {
               if (!winSound.isPlaying) {
                 console.log('winSound finished, triggering next spin');
-                if (clickSound && clickSound.isPlayable) {  // ADDED THIS LINE
-                  clickSound.play();                        // ADDED THIS LINE
-                }                                           // ADDED THIS LINE
+                if (clickSound && clickSound.isPlayable) {
+                  clickSound.play();
+                }
                 if (isAutoPlaying) {
                   startPlay();
                 }
@@ -677,9 +693,9 @@ function App() {
           } else {
             console.log('No win during autoplay, proceeding with 500ms delay');
             setTimeout(() => {
-              if (clickSound && clickSound.isPlayable) {  // ADDED THIS LINE
-                clickSound.play();                        // ADDED THIS LINE
-              }                                           // ADDED THIS LINE
+              if (clickSound && clickSound.isPlayable) {
+                clickSound.play();
+              }
               if (isAutoPlaying) {
                 startPlay();
               }
