@@ -11,8 +11,48 @@ import {
   Text,
   Texture,
 } from 'pixi.js';
-import { headerTextStyle, REEL_WIDTH, SYMBOL_SIZE, BORDER_THICKNESS, REEL_HEIGHT, REEL_SPACING, BUTTON_SCALE } from './styles.js';
-import { tweenTo, lerp, linear } from './utils.js';
+import {
+  headerTextStyle,
+  balanceTextStyle,
+  balanceAmountTextStyle,
+  betLabelTextStyle,
+  winAmountTextStyle,
+  betButtonTextStyle,
+  REEL_WIDTH,
+  SYMBOL_SIZE,
+  BORDER_THICKNESS,
+  REEL_HEIGHT,
+  REEL_SPACING,
+  TOTAL_REEL_WIDTH,
+  BUTTON_SCALE,
+  BUTTON_WIDTH,
+  BUTTON_HEIGHT,
+  BUTTON_SPACING,
+  TOTAL_BUTTONS_WIDTH,
+  BACKGROUND_COLOR,
+  REEL_BACKGROUND_COLOR,
+  REEL_BORDER_COLOR,
+  BUTTON_ACTIVE_COLOR,
+  BUTTON_INACTIVE_COLOR,
+  AUTOPLAY_ACTIVE_TINT,
+  AUTOPLAY_INACTIVE_TINT,
+  SLOT_BORDER_HEIGHT_SCALE,
+  SLOT_BORDER_Y_OFFSET,
+  REEL_OFFSET_Y_ADJUST,
+  REEL_CONTAINER_Y_ADJUST,
+  HEADER_Y_POSITION,
+  getMarginTop,
+  getMarginLeft,
+} from './styles.js';
+import {
+  tweenTo,
+  lerp,
+  linear,
+  createBlinkEffect,
+  printReelSymbols,
+  checkForWins,
+  updateUI,
+} from './utils.js';
 
 function App() {
   useEffect(() => {
@@ -20,11 +60,14 @@ function App() {
       const app = new Application({
         width: window.innerWidth,
         height: window.innerHeight,
-        backgroundColor: 0x1099bb,
+        backgroundColor: BACKGROUND_COLOR,
         resizeTo: window,
       });
 
-      await app.init({ background: '#1099bb', resizeTo: window });
+      await app.init({
+        background: `#${BACKGROUND_COLOR.toString(16)}`,
+        resizeTo: window,
+      });
 
       app.view.id = 'pixi-canvas';
       document.body.appendChild(app.view);
@@ -100,11 +143,11 @@ function App() {
       ];
 
       const symbolValues = {
-        'apple': 5,
-        'banana': 10,
-        'broccoli': 15,
-        'grapes': 20,
-        'pepper': 25
+        apple: 5,
+        banana: 10,
+        broccoli: 15,
+        grapes: 20,
+        pepper: 25,
       };
 
       const reels = [];
@@ -112,24 +155,22 @@ function App() {
 
       const slotBorderTexture = Texture.from('/symbols/slotborder.png');
       const slotBorderSprite = new Sprite(slotBorderTexture);
-      const totalWidth = 7 * REEL_WIDTH + 6 * REEL_SPACING;
-      const slotBorderScaleFactor = totalWidth / slotBorderTexture.width;
+      const slotBorderScaleFactor = TOTAL_REEL_WIDTH / slotBorderTexture.width;
       slotBorderSprite.scale.set(slotBorderScaleFactor);
-
-      const heightScaleFactor = 0.38;
-      slotBorderSprite.scale.y = heightScaleFactor;
-
-      slotBorderSprite.x = -(slotBorderSprite.width - totalWidth) / 2;
-      slotBorderSprite.y = -(slotBorderSprite.height - REEL_HEIGHT) / 2 + 62;
+      slotBorderSprite.scale.y = SLOT_BORDER_HEIGHT_SCALE;
+      slotBorderSprite.x = -(slotBorderSprite.width - TOTAL_REEL_WIDTH) / 2;
+      slotBorderSprite.y =
+        -(slotBorderSprite.height - REEL_HEIGHT) / 2 + SLOT_BORDER_Y_OFFSET;
       reelContainer.addChild(slotBorderSprite);
 
-      const reelOffsetX = (slotBorderSprite.width - totalWidth) / 2;
-      const reelOffsetY = (slotBorderSprite.height - REEL_HEIGHT) / 2 + 20;
+      const reelOffsetX = (slotBorderSprite.width - TOTAL_REEL_WIDTH) / 2;
+      const reelOffsetY =
+        (slotBorderSprite.height - REEL_HEIGHT) / 2 + REEL_OFFSET_Y_ADJUST;
 
       for (let i = 0; i < 5; i++) {
         const rc = new Container();
-        rc.x = reelOffsetX + i * (REEL_WIDTH + REEL_SPACING) + 145;
-        rc.y = reelOffsetY + 5;
+        rc.x = reelOffsetX + i * (REEL_WIDTH + REEL_SPACING) + 145; // 145 is a magic number, could be parameterized
+        rc.y = reelOffsetY + REEL_CONTAINER_Y_ADJUST;
         reelContainer.addChild(rc);
 
         const reel = {
@@ -145,14 +186,15 @@ function App() {
         rc.filters = [reel.blur];
 
         const reelBackground = new Graphics();
-        reelBackground.beginFill(0xC69C6D);
+        reelBackground.beginFill(REEL_BACKGROUND_COLOR);
         reelBackground.drawRect(0, 0, REEL_WIDTH, REEL_HEIGHT);
         reelBackground.endFill();
         rc.addChild(reelBackground);
 
         const symbolOffset = (REEL_HEIGHT - SYMBOL_SIZE * 3) / 2;
         for (let j = 0; j < 4; j++) {
-          const randomSymbol = slotTextures[Math.floor(Math.random() * slotTextures.length)];
+          const randomSymbol =
+            slotTextures[Math.floor(Math.random() * slotTextures.length)];
           const symbol = new Sprite(randomSymbol.texture);
           symbol.textureName = randomSymbol.name;
           symbol.y = symbolOffset + j * SYMBOL_SIZE;
@@ -166,14 +208,14 @@ function App() {
         }
 
         const border = new Graphics();
-        border.lineStyle(BORDER_THICKNESS, 0xFFD700, 1);
+        border.lineStyle(BORDER_THICKNESS, REEL_BORDER_COLOR, 1);
         border.beginFill(0x000000, 0);
         border.drawRect(0, 0, REEL_WIDTH, REEL_HEIGHT);
         border.endFill();
         rc.addChild(border);
 
         const mask = new Graphics();
-        mask.beginFill(0xFFFFFF);
+        mask.beginFill(0xffffff);
         mask.drawRect(0, 0, REEL_WIDTH, REEL_HEIGHT);
         mask.endFill();
         rc.addChild(mask);
@@ -183,14 +225,20 @@ function App() {
       }
       app.stage.addChild(reelContainer);
 
-      const marginTop = (app.screen.height - slotBorderSprite.height) / 2;
-      const marginLeft = (app.screen.width - slotBorderSprite.width) / 2;
+      const marginTop = getMarginTop(
+        app.screen.height,
+        slotBorderSprite.height
+      );
+      const marginLeft = getMarginLeft(
+        app.screen.width,
+        slotBorderSprite.width
+      );
       reelContainer.x = marginLeft;
       reelContainer.y = marginTop;
 
       const headerText = new Text('Symbols Hot', headerTextStyle);
       headerText.x = Math.round((app.screen.width - headerText.width) / 2);
-      headerText.y = 50;
+      headerText.y = HEADER_Y_POSITION;
       app.stage.addChild(headerText);
 
       const startButtonTexture = Texture.from('/symbols/startbutton.png');
@@ -199,83 +247,90 @@ function App() {
 
       let player = {
         credits: 9999,
-        chip: 5.00,
+        chip: 5.0,
       };
 
-      const balanceText = new Text('BALANCE:', { fontSize: 20, fill: 0xffffff });
+      const balanceText = new Text('BALANCE:', balanceTextStyle);
       balanceText.x = marginLeft;
       balanceText.y = marginTop + slotBorderSprite.height + 10;
       app.stage.addChild(balanceText);
 
-      const balanceAmountText = new Text(`${player.credits.toFixed(2)}`, { 
-        fontSize: 24, 
-        fill: 0xffffff, 
-        fontWeight: 'bold'
-      });
+      const balanceAmountText = new Text(
+        `${player.credits.toFixed(2)}`,
+        balanceAmountTextStyle
+      );
       balanceAmountText.x = marginLeft;
       balanceAmountText.y = marginTop + slotBorderSprite.height + 35;
       app.stage.addChild(balanceAmountText);
 
-      let betLabel = new Text('PLEASE PLACE YOUR BET', { fontSize: 20, fill: 0xffffff });
+      let betLabel = new Text('PLEASE PLACE YOUR BET', betLabelTextStyle);
       betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
       betLabel.y = marginTop + slotBorderSprite.height + 10;
       app.stage.addChild(betLabel);
 
-      const winAmountText = new Text('', { 
-        fontSize: 20, 
-        fill: 0xffffff, 
-        fontWeight: 'bold' 
-      });
+      const winAmountText = new Text('', winAmountTextStyle);
       winAmountText.y = marginTop + slotBorderSprite.height + 10;
       winAmountText.visible = false;
       app.stage.addChild(winAmountText);
 
       const betValues = [5, 10, 15, 20, 25];
       const betButtons = [];
-      const buttonWidth = 60;
-      const buttonHeight = 40;
-      const buttonSpacing = 10;
-      const totalButtonsWidth = betValues.length * buttonWidth + (betValues.length - 1) * buttonSpacing;
 
       betValues.forEach((value, index) => {
         const button = new Graphics();
-        button.beginFill(value === player.chip ? 0x568203 : 0x333333);
-        button.drawRect(0, 0, buttonWidth, buttonHeight);
+        button.beginFill(
+          value === player.chip ? BUTTON_ACTIVE_COLOR : BUTTON_INACTIVE_COLOR
+        );
+        button.drawRect(0, 0, BUTTON_WIDTH, BUTTON_HEIGHT);
         button.endFill();
-        button.x = (app.screen.width - totalButtonsWidth) / 2 + index * (buttonWidth + buttonSpacing);
+        button.x =
+          (app.screen.width - TOTAL_BUTTONS_WIDTH) / 2 +
+          index * (BUTTON_WIDTH + BUTTON_SPACING);
         button.y = marginTop + slotBorderSprite.height + 40;
         button.eventMode = 'static';
         button.cursor = 'pointer';
-      
-        const buttonText = new Text(value.toFixed(2), { 
-          fontSize: 16, 
-          fill: 0xffffff, 
-          fontWeight: 'bold'
-        });
-        buttonText.x = (buttonWidth - buttonText.width) / 2;
-        buttonText.y = (buttonHeight - buttonText.height) / 2;
+
+        const buttonText = new Text(value.toFixed(2), betButtonTextStyle);
+        buttonText.x = (BUTTON_WIDTH - buttonText.width) / 2;
+        buttonText.y = (BUTTON_HEIGHT - buttonText.height) / 2;
         button.addChild(buttonText);
-      
+
         button.addListener('pointerdown', () => {
           if (clickSound && clickSound.isPlayable) {
             clickSound.play();
           }
-          
+
           if (isSpinning) {
             stopSpinning();
           } else {
             player.chip = value;
             betButtons.forEach((btn, idx) => {
               btn.clear();
-              btn.beginFill(betValues[idx] === player.chip ? 0x568203 : 0x333333);
-              btn.drawRect(0, 0, buttonWidth, buttonHeight);
+              btn.beginFill(
+                betValues[idx] === player.chip
+                  ? BUTTON_ACTIVE_COLOR
+                  : BUTTON_INACTIVE_COLOR
+              );
+              btn.drawRect(0, 0, BUTTON_WIDTH, BUTTON_HEIGHT);
               btn.endFill();
             });
-            updateUI();
+            updateUI(
+              app,
+              player,
+              betLabel,
+              winAmountText,
+              balanceText,
+              balanceAmountText,
+              betButtons,
+              slotBorderSprite,
+              TOTAL_BUTTONS_WIDTH,
+              BUTTON_WIDTH,
+              BUTTON_SPACING
+            );
             startPlay();
           }
         });
-      
+
         betButtons.push(button);
         app.stage.addChild(button);
       });
@@ -294,123 +349,11 @@ function App() {
       autoplayButton.eventMode = 'static';
       autoplayButton.cursor = 'pointer';
 
-      const updateUI = () => {
-        balanceAmountText.text = `${player.credits.toFixed(2)}`;
-        balanceText.x = marginLeft;
-        balanceAmountText.x = marginLeft;
-        betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
-        if (winAmountText.visible) {
-          winAmountText.x = betLabel.x + betLabel.width + 5;
-        }
-        betButtons.forEach((button, index) => {
-          button.x = (app.screen.width - totalButtonsWidth) / 2 + index * (buttonWidth + buttonSpacing);
-        });
-      };
-
       let isSpinning = false;
       let isAutoPlaying = false;
       let running = false;
       const tweening = [];
-      let fireCleanups = []; // Store cleanup functions for fire effects
-
-      function createBlinkEffect(symbol, lineNumber) {
-        const blinkContainer = new Container();
-        
-        // Define border colors based on the winning line
-        const borderColors = {
-          1: 0x0000FF, // Blue for Line 1
-          2: 0xFFFF00, // Yellow for Line 2
-          3: 0x00FF00, // Green for Line 3
-          4: 0xFF69B4, // Pink for Line 4
-          5: 0xFF0000, // Red for Line 5
-        };
-        
-        // Select the border color based on the winning line, default to gold if lineNumber is invalid
-        const borderColor = borderColors[lineNumber] || 0xFFD700;
-        console.log(`Applying border color for line ${lineNumber}: ${borderColor.toString(16)}`);
-        
-        // Define the border
-        const border = new Graphics();
-        const borderThickness = 4; // Thickness of the border
-        const widthIncrease = 20; // How much wider we want the box to be (10px on each side)
-        const heightIncrease = 1; // Keep height the same or adjust if needed
-        border.lineStyle(borderThickness, borderColor, 1);
-        border.beginFill(0xFFEA00, 0.6);
-        border.drawRect(
-          -widthIncrease/2, // Start position X (moved left to center the wider box)
-          -heightIncrease/2, // Start position Y
-          SYMBOL_SIZE + widthIncrease, // New width
-          SYMBOL_SIZE + heightIncrease // New height
-        );
-        border.endFill();
-        
-        // Position the border to align with the symbol box
-        const symbolOffsetX = (SYMBOL_SIZE - symbol.width) / 2;
-        const symbolOffsetY = (SYMBOL_SIZE - symbol.height) / 2;
-        blinkContainer.x = symbol.x - symbolOffsetX;
-        blinkContainer.y = symbol.y - symbolOffsetY;
-        
-        // Add the border to the container
-        blinkContainer.addChild(border);
-        
-        // Ensure the border is behind the symbol
-        symbol.parent.addChildAt(blinkContainer, symbol.parent.getChildIndex(symbol));
-      
-        // Store original scale for pulsing animation
-        const originalScale = { x: symbol.scale.x, y: symbol.scale.y };
-        
-        // Blinking animation for border and pulsing for symbol
-        let blinkDirection = -1; // 1 for fading in, -1 for fading out
-        const blinkSpeed = 0.05; // Speed of the blink (alpha change per frame)
-        const minAlpha = 0.3; // Minimum opacity
-        const maxAlpha = 1.0; // Maximum opacity
-        
-        // Pulsing animation variables
-        let pulseDirection = 2; // 1 for growing, -1 for shrinking
-        const pulseSpeed = 0.0020;
-        const minScale = 0.9;
-        const maxScale = 1;
-        
-        const animateEffects = () => {
-          // Update alpha for blinking effect
-          border.alpha += blinkDirection * blinkSpeed;
-          
-          // Update scale for pulsing effect
-          symbol.scale.x += pulseDirection * pulseSpeed;
-          symbol.scale.y += pulseDirection * pulseSpeed;
-          
-          // Reverse blink direction if alpha reaches the min or max
-          if (border.alpha <= minAlpha) {
-            border.alpha = minAlpha;
-            blinkDirection = 1;
-          } else if (border.alpha >= maxAlpha) {
-            border.alpha = maxAlpha;
-            blinkDirection = -1;
-          }
-          
-          // Reverse pulse direction if scale reaches min or max
-          if (symbol.scale.x <= originalScale.x * minScale) {
-            symbol.scale.x = originalScale.x * minScale;
-            symbol.scale.y = originalScale.y * minScale;
-            pulseDirection = 1;
-          } else if (symbol.scale.x >= originalScale.x * maxScale) {
-            symbol.scale.x = originalScale.x * maxScale;
-            symbol.scale.y = originalScale.y * maxScale;
-            pulseDirection = -1;
-          }
-        };
-        
-        // Add the animation to the ticker
-        app.ticker.add(animateEffects);
-        
-        // Return a cleanup function
-        return () => {
-          app.ticker.remove(animateEffects);
-          blinkContainer.destroy({ children: true });
-          // Reset symbol scale to original when effect ends
-          symbol.scale.set(originalScale.x, originalScale.y);
-        };
-      }
+      let fireCleanups = [];
 
       autoplayButton.addListener('pointerdown', () => {
         if (clickSound && clickSound.isPlayable) {
@@ -420,9 +363,9 @@ function App() {
         isAutoPlaying = !isAutoPlaying;
         console.log('Autoplay toggled:', isAutoPlaying);
         if (isAutoPlaying) {
-          autoplayButton.tint = 0x00FF80;
+          autoplayButton.tint = AUTOPLAY_ACTIVE_TINT;
         } else {
-          autoplayButton.tint = 0xFFFFFF;
+          autoplayButton.tint = AUTOPLAY_INACTIVE_TINT;
         }
         if (isAutoPlaying && !running) {
           startPlay();
@@ -445,50 +388,65 @@ function App() {
       app.stage.addChild(autoplayButton);
 
       function startPlay() {
+        if (winSound && winSound.isPlaying) {
+          console.log('Stopping win sound (winsound.wav) as new spin starts');
+          winSound.stop();
+        }
         if (running) return;
         if (player.credits < player.chip) {
           console.log('Not enough credits to spin');
           return;
         }
-      
-        // Reset all symbol alphas to 1.0 before starting the spin
-        reels.forEach(reel => {
-          reel.symbols.forEach(symbol => {
-            symbol.alpha = 1.0; // Ensure all symbols start fully opaque
+
+        reels.forEach((reel) => {
+          reel.symbols.forEach((symbol) => {
+            symbol.alpha = 1.0;
           });
         });
-      
-        fireCleanups.forEach(cleanup => cleanup());
+
+        fireCleanups.forEach((cleanup) => cleanup());
         fireCleanups = [];
-      
+
         running = true;
         isSpinning = true;
-      
+
         betLabel.text = 'GOOD LUCK!';
         betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
         winAmountText.visible = false;
-      
+
         startButton.texture = pauseButtonTexture;
         startButton.x = marginLeft + slotBorderSprite.width - startButton.width;
         startButton.y = marginTop + slotBorderSprite.height + 20;
-      
+
         player.credits -= player.chip;
-        updateUI();
-      
+        updateUI(
+          app,
+          player,
+          betLabel,
+          winAmountText,
+          balanceText,
+          balanceAmountText,
+          betButtons,
+          slotBorderSprite,
+          TOTAL_BUTTONS_WIDTH,
+          BUTTON_WIDTH,
+          BUTTON_SPACING
+        );
+
         if (spinSound && spinSound.isPlayable) {
           console.log('Playing spin sound (audio2.mp3)');
           spinSound.play();
         }
-      
+
         const baseSpinTime = 700;
         const stopDelay = 300;
-      
+
         for (let i = 0; i < reels.length; i++) {
           const r = reels[i];
           const extra = Math.floor(Math.random() * 3);
           const target = r.position + 10 + i * 5 + extra;
           const spinTime = baseSpinTime + i * stopDelay;
-      
+
           tweenTo(
             r,
             'position',
@@ -513,7 +471,14 @@ function App() {
       function stopSpinning() {
         if (!running) return;
 
-        const remainingTweens = tweening.filter(t => reels.includes(t.object));
+        if (winSound && winSound.isPlaying) {
+          console.log('Stopping win sound (winsound.wav) as spin was stopped');
+          winSound.stop();
+        }
+
+        const remainingTweens = tweening.filter((t) =>
+          reels.includes(t.object)
+        );
         remainingTweens.forEach((tween) => {
           tween.object[tween.property] = tween.target;
           if (tween.complete) {
@@ -525,160 +490,94 @@ function App() {
         reelsComplete();
       }
 
-      function printReelSymbols() {
-        console.log('Current symbols on each reel:');
-        reels.forEach((reel, reelIndex) => {
-          const symbolOffset = (REEL_HEIGHT - SYMBOL_SIZE * 3) / 2;
-          const visibleSymbols = reel.symbols
-            .filter(symbol => symbol.y >= symbolOffset && symbol.y < symbolOffset + SYMBOL_SIZE * 3)
-            .sort((a, b) => a.y - b.y)
-            .map(symbol => symbol.textureName);
-          console.log(`Reel ${reelIndex + 1}: ${visibleSymbols.join(', ')}`);
-        });
-      }
-
-      function checkForWins() {
-        const reelSymbols = reels.map(reel => {
-          const symbolOffset = (REEL_HEIGHT - SYMBOL_SIZE * 3) / 2;
-          return reel.symbols
-            .filter(symbol => symbol.y >= symbolOffset && symbol.y < symbolOffset + SYMBOL_SIZE * 3)
-            .sort((a, b) => a.y - b.y)
-            .map(symbol => ({ name: symbol.textureName, sprite: symbol }));
-        });
-      
-        const lines = [
-          reelSymbols.map(symbols => symbols[0]), // Line 1
-          reelSymbols.map(symbols => symbols[1]), // Line 2
-          reelSymbols.map(symbols => symbols[2]), // Line 3
-          [
-            reelSymbols[0][0],
-            reelSymbols[1][1],
-            reelSymbols[2][2],
-            reelSymbols[3][1],
-            reelSymbols[4][0],
-          ], // Line 4
-          [
-            reelSymbols[0][2],
-            reelSymbols[1][1],
-            reelSymbols[2][0],
-            reelSymbols[3][1],
-            reelSymbols[4][2],
-          ], // Line 5
-        ];
-      
-        console.log('Winning lines:', lines.map(line => line.map(s => s.name)));
-      
-        let totalWinnings = 0;
-        const winningSymbols = new Set();
-        let hasWin = false;
-        let winningLine = null; // Track the first winning line number
-      
-        lines.forEach((line, index) => {
-          const firstSymbol = line[0].name;
-          let winLength = 1;
-      
-          for (let i = 1; i < line.length; i++) {
-            if (line[i].name === firstSymbol) {
-              winLength++;
-            } else {
-              break;
-            }
-          }
-      
-          if (winLength >= 3) {
-            hasWin = true;
-            const symbolValue = symbolValues[firstSymbol];
-            const lineWinnings = (symbolValue * winLength) * player.chip;
-            totalWinnings += lineWinnings;
-            console.log(`Win on line ${index + 1}: ${firstSymbol} x${winLength} = ${lineWinnings.toFixed(2)}`);
-      
-            for (let i = 0; i < winLength; i++) {
-              winningSymbols.add(line[i].sprite);
-            }
-      
-            // Store the first winning line number (1-based index)
-            if (winningLine === null) {
-              winningLine = index + 1;
-            }
-          }
-        });
-      
-        if (totalWinnings > 0) {
-          player.credits += totalWinnings;
-          console.log(`Total winnings: ${totalWinnings.toFixed(2)} credits`);
-          updateUI();
-        }
-      
-        if (hasWin && winSound && winSound.isPlayable) {
-          console.log('Playing win sound (winsound.wav), duration:', winSound.duration);
-          winSound.play();
-        }
-      
-        return { winnings: totalWinnings, winningSymbols: Array.from(winningSymbols), winningLine };
-      }
-
       function reelsComplete() {
         running = false;
         isSpinning = false;
         console.log('All reels have stopped');
-      
-        reels.forEach(reel => {
+
+        reels.forEach((reel) => {
           reel.position = Math.round(reel.position);
           for (let j = 0; j < reel.symbols.length; j++) {
-            reel.symbols[j].y = ((reel.position + j) % reel.symbols.length) * SYMBOL_SIZE - SYMBOL_SIZE + (REEL_HEIGHT - SYMBOL_SIZE * 3) / 2;
+            reel.symbols[j].y =
+              ((reel.position + j) % reel.symbols.length) * SYMBOL_SIZE -
+              SYMBOL_SIZE +
+              (REEL_HEIGHT - SYMBOL_SIZE * 3) / 2;
           }
         });
-      
-        printReelSymbols();
-        const { winnings, winningSymbols, winningLine } = checkForWins();
-      
-        fireCleanups.forEach(cleanup => cleanup());
+
+        printReelSymbols(reels, REEL_HEIGHT, SYMBOL_SIZE);
+        const { winnings, winningSymbols, winningLine, hasWin } = checkForWins(
+          reels,
+          symbolValues,
+          player,
+          REEL_HEIGHT,
+          SYMBOL_SIZE
+        );
+
+        fireCleanups.forEach((cleanup) => cleanup());
         fireCleanups = [];
-      
-        // Apply shading effect only if there’s a win
+
         if (winnings > 0) {
           console.log('Win detected, applying shading to non-winning symbols');
-          reels.forEach(reel => {
-            reel.symbols.forEach(symbol => {
-              // Set non-winning symbols to semi-transparent
+          reels.forEach((reel) => {
+            reel.symbols.forEach((symbol) => {
               if (!winningSymbols.includes(symbol)) {
-                symbol.alpha = 0.3; // Shady effect for non-winning symbols
+                symbol.alpha = 0.3;
               } else {
-                symbol.alpha = 1.0; // Ensure winning symbols are fully opaque
-                const cleanup = createBlinkEffect(symbol, winningLine);
+                symbol.alpha = 1.0;
+                const cleanup = createBlinkEffect(
+                  symbol,
+                  winningLine,
+                  app,
+                  SYMBOL_SIZE
+                );
                 fireCleanups.push(cleanup);
               }
             });
           });
         }
-      
+
         if (winnings > 0) {
           betLabel.text = 'YOU WON';
           winAmountText.text = `${winnings.toFixed(2)}`;
           winAmountText.visible = true;
-          betLabel.x = Math.round((app.screen.width - (betLabel.width + 5 + winAmountText.width)) / 2);
+          betLabel.x = Math.round(
+            (app.screen.width - (betLabel.width + 5 + winAmountText.width)) / 2
+          );
           winAmountText.x = betLabel.x + betLabel.width + 5;
         } else {
           betLabel.text = 'PLEASE PLACE YOUR BET';
           winAmountText.visible = false;
           betLabel.x = Math.round((app.screen.width - betLabel.width) / 2);
         }
-      
+
         startButton.texture = startButtonTexture;
         startButton.x = marginLeft + slotBorderSprite.width - startButton.width;
         startButton.y = marginTop + slotBorderSprite.height + 20;
-      
+
         if (spinSound) {
           console.log('Stopping spin sound (audio2.mp3)');
           spinSound.stop();
         }
-      
+
+        if (hasWin && winSound && winSound.isPlayable) {
+          console.log(
+            'Playing win sound (winsound.wav), duration:',
+            winSound.duration
+          );
+          winSound.play();
+        }
+
         if (isAutoPlaying) {
           if (winnings > 0) {
-            console.log('Win detected during autoplay, waiting for winSound to finish...');
+            console.log(
+              'Win detected during autoplay, waiting for winSound to finish...'
+            );
             const waitForWinSound = () => {
-              if (!winSound.isPlaying) {
-                console.log('winSound finished, triggering next spin');
+              if (!isAutoPlaying || !winSound.isPlaying) {
+                console.log(
+                  'winSound finished or autoplay disabled, triggering next spin'
+                );
                 if (clickSound && clickSound.isPlayable) {
                   clickSound.play();
                 }
@@ -693,6 +592,7 @@ function App() {
           } else {
             console.log('No win during autoplay, proceeding with 500ms delay');
             setTimeout(() => {
+              if (!isAutoPlaying) return;
               if (clickSound && clickSound.isPlayable) {
                 clickSound.play();
               }
@@ -714,13 +614,20 @@ function App() {
             const s = r.symbols[j];
             const prevy = s.y;
 
-            s.y = ((r.position + j) % r.symbols.length) * SYMBOL_SIZE - SYMBOL_SIZE + (REEL_HEIGHT - SYMBOL_SIZE * 3) / 2;
+            s.y =
+              ((r.position + j) % r.symbols.length) * SYMBOL_SIZE -
+              SYMBOL_SIZE +
+              (REEL_HEIGHT - SYMBOL_SIZE * 3) / 2;
 
             if (s.y < -SYMBOL_SIZE && prevy > SYMBOL_SIZE) {
-              const randomSymbol = slotTextures[Math.floor(Math.random() * slotTextures.length)];
+              const randomSymbol =
+                slotTextures[Math.floor(Math.random() * slotTextures.length)];
               s.texture = randomSymbol.texture;
               s.textureName = randomSymbol.name;
-              s.scale.x = s.scale.y = Math.min(SYMBOL_SIZE / s.texture.width, SYMBOL_SIZE / s.texture.height);
+              s.scale.x = s.scale.y = Math.min(
+                SYMBOL_SIZE / s.texture.width,
+                SYMBOL_SIZE / s.texture.height
+              );
               s.x = Math.round((REEL_WIDTH - s.width) / 2);
             }
           }
@@ -735,7 +642,11 @@ function App() {
           const t = tweening[i];
           const phase = Math.min(1, (now - t.start) / t.time);
 
-          t.object[t.property] = lerp(t.propertyBeginValue, t.target, t.easing(phase));
+          t.object[t.property] = lerp(
+            t.propertyBeginValue,
+            t.target,
+            t.easing(phase)
+          );
           if (t.change) t.change(t);
           if (phase === 1) {
             t.object[t.property] = t.target;
@@ -752,10 +663,16 @@ function App() {
         backgroundSprite.width = app.screen.width;
         backgroundSprite.height = app.screen.height;
         headerText.x = Math.round((app.screen.width - headerText.width) / 2);
-        reelContainer.x = (app.screen.width - slotBorderSprite.width) / 2;
-        reelContainer.y = (app.screen.height - slotBorderSprite.height) / 2;
-        slotBorderSprite.scale.set(totalWidth / slotBorderTexture.width);
-        slotBorderSprite.x = -(slotBorderSprite.width - totalWidth) / 2;
+        reelContainer.x = getMarginLeft(
+          app.screen.width,
+          slotBorderSprite.width
+        );
+        reelContainer.y = getMarginTop(
+          app.screen.height,
+          slotBorderSprite.height
+        );
+        slotBorderSprite.scale.set(TOTAL_REEL_WIDTH / slotBorderTexture.width);
+        slotBorderSprite.x = -(slotBorderSprite.width - TOTAL_REEL_WIDTH) / 2;
         slotBorderSprite.y = -(slotBorderSprite.height - REEL_HEIGHT) / 2;
         for (let i = 0; i < reels.length; i++) {
           reels[i].container.x = reelOffsetX + i * (REEL_WIDTH + REEL_SPACING);
@@ -765,7 +682,19 @@ function App() {
         startButton.y = marginTop + slotBorderSprite.height + 20;
         autoplayButton.x = startButton.x - autoplayButton.width - 10;
         autoplayButton.y = marginTop + slotBorderSprite.height + 20;
-        updateUI();
+        updateUI(
+          app,
+          player,
+          betLabel,
+          winAmountText,
+          balanceText,
+          balanceAmountText,
+          betButtons,
+          slotBorderSprite,
+          TOTAL_BUTTONS_WIDTH,
+          BUTTON_WIDTH,
+          BUTTON_SPACING
+        );
       });
 
       return () => {
